@@ -715,6 +715,27 @@ class AlexaMediaFlowHandler(config_entries.ConfigFlow):
                         )
                         return self.async_abort(reason="already_configured")
 
+                target_unique_id = f"{email} - {login.url}"
+
+                configured_entry = (
+                    self.hass.config_entries.async_entry_for_domain_unique_id(
+                        DOMAIN,
+                        target_unique_id,
+                    )
+                )
+                
+                if (
+                    configured_entry
+                    and configured_entry.entry_id != existing_entry.entry_id
+                ):
+                    _LOGGER.error(
+                        "Cannot reauth %s: unique_id already belongs to "
+                        "config entry %s",
+                        hide_email(email),
+                        configured_entry.entry_id,
+                    )
+                    return self.async_abort(reason="already_configured")
+    
                 if old_email and old_email != email and old_email in accounts:
                     _LOGGER.debug(
                         "Moving Alexa runtime account from %s to %s",
@@ -732,8 +753,8 @@ class AlexaMediaFlowHandler(config_entries.ConfigFlow):
                 self.hass.config_entries.async_update_entry(
                     existing_entry,
                     data=self.config,
-                    title=f"{login.email} - {login.url}",
-                    unique_id=f"{login.email} - {login.url}",
+                    title=target_unique_id,
+                    unique_id=target_unique_id,
                 )
 
                 _LOGGER.debug("Reauth successful for %s", hide_email(email))
