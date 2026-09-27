@@ -330,6 +330,68 @@ class TestReauthReload:
         assert kwargs["unique_id"] == f"{new_email} - {mock_login.url}"
         assert kwargs["title"] == f"{new_email} - {mock_login.url}"
 
+    @pytest.mark.asyncio
+    async def test_reauth_aborts_on_unique_id_conflict(self):
+        """Test reauth aborts when another config entry owns the target unique_id."""
+    
+        flow = AlexaMediaFlowHandler()
+        flow.hass = MagicMock()
+    
+        new_email = "new@example.com"
+    
+        flow.config = {
+            "email": new_email,
+            "reauth": True,
+        }
+    
+        mock_login = MagicMock()
+        mock_login.email = new_email
+        mock_login.url = "https://amazon.com"
+        mock_login.status = {"login_successful": True}
+        mock_login.access_token = "test_token"  # nosec B105
+        mock_login.refresh_token = "test_refresh"  # nosec B105
+        mock_login.expires_in = 3600
+        mock_login.mac_dms = "test_mac"
+        mock_login.code_verifier = "test_verifier"
+        mock_login.authorization_code = "test_code"
+        flow.login = mock_login
+    
+        existing_entry = MagicMock()
+        existing_entry.entry_id = "existing_entry"
+        existing_entry.data = {"email": "old@example.com"}
+    
+        conflicting_entry = MagicMock()
+        conflicting_entry.entry_id = "conflicting_entry"
+    
+        flow.hass.data = {
+            DATA_ALEXAMEDIA: {
+                "accounts": {},
+                "config_flows": {},
+            }
+        }
+    
+        flow.async_set_unique_id = AsyncMock(return_value=existing_entry)
+    
+        flow.hass.config_entries.async_entry_for_domain_unique_id = MagicMock(
+            return_value=conflicting_entry
+        )
+    
+        flow.hass.config_entries.async_update_entry = MagicMock()
+        flow.hass.config_entries.async_reload = AsyncMock()
+    
+        flow.async_abort = MagicMock(
+            return_value={
+                "type": "abort",
+                "reason": "already_configured",
+            }
+        )
+    
+        result = await flow._test_login()
+    
+        assert result["reason"] == "already_configured"
+    
+        flow.hass.config_entries.async_update_entry.assert_not_called()
+        flow.hass.config_entries.async_reload.assert_not_called()
 
 class TestConfigFlowInvalidOtpKeyDataSchema:
     """Tests for handling invalid OTP key errors in config flow.
